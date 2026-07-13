@@ -10,4 +10,4 @@
 
 firebase.initializeApp(firebaseConfig);
 
-firebase.database().ref('nacc')
+const contactFormDB = firebase.database().ref('nacc')
