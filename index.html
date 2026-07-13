@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ICSE/ISC Student Enrollment Form 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+
+<!-- ============================================================
+     FIREBASE v10+ SDK  (Modular — loaded as ES Modules)
+     No npm needed. Works directly in the browser via CDN.
+============================================================ -->
+<script type="module">
+
+  /* ══════════════════════════════════════════════════════════
+     🔧 STEP 1 — PASTE YOUR FIREBASE CONFIG HERE
+     Go to: Firebase Console → Project Settings → Your Apps
+     Copy the firebaseConfig object and replace below.
+  ══════════════════════════════════════════════════════════ */
+  const firebaseConfig = {
+    apiKey:            "YOUR_API_KEY",
+    authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId:         "YOUR_PROJECT_ID",
+    storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId:             "YOUR_APP_ID"
+  };
+  /* ══════════════════════════════════════════════════════════
+     🔧 STEP 2 — CHOOSE YOUR DATABASE
+     Set this to "firestore" or "realtime" depending on which
+     Firebase database you created in the console.
+  ══════════════════════════════════════════════════════════ */
+  const DATABASE_TYPE = "firestore"; // ← change to "realtime" if needed
+
+  /* ══════════════════════════════════════════════════════════
+     🔧 STEP 3 — COLLECTION / PATH NAME
+     Firestore: name of the collection where records are saved.
+     Realtime DB: path in the JSON tree (e.g. "enrollments").
+  ══════════════════════════════════════════════════════════ */
+  const DB_COLLECTION = "enrollments";
+
+  // ── Firebase imports ──────────────────────────────────────
+  import { initializeApp }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+  import { getFirestore, collection, addDoc, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  import { getDatabase, ref, push, set }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // ── Initialise Firebase ───────────────────────────────────
+  const app = initializeApp(firebaseConfig);
+  const firestoreDB  = getFirestore(app);
+  const realtimeDB   = getDatabase(app);
+
+  // ── Save to Firestore ─────────────────────────────────────
+  async function saveToFirestore(data) {
+    const docRef = await addDoc(collection(firestoreDB, DB_COLLECTION), {
+      ...data,
+      submittedAt: serverTimestamp()
+    });
+    return docRef.id;
+  }
+
+  // ── Save to Realtime Database ─────────────────────────────
+  async function saveToRealtime(data) {
+    const dbRef = ref(realtimeDB, DB_COLLECTION);
+    const newRef = push(dbRef);
+    await set(newRef, { ...data, submittedAt: new Date().toISOString() });
+    return newRef.key;
+  }
+
+  // ── Form submit handler ───────────────────────────────────
+  window.handleFormSubmit = async function (e) {
+    e.preventDefault();
+
+    const btn      = document.getElementById("submitBtn");
+    const statusEl = document.getElementById("formStatus");
+
+    // Gather subject checkboxes
+    const subjects = [...document.querySelectorAll('input[name="subject"]:checked')]
+                       .map(cb => cb.value);
+
+    if (subjects.length === 0) {
+      showStatus("error", "⚠️ Please select at least one subject.");
+      return;
+    }
+
+    // Build data object from form fields
+    const formData = {
+      studentName:   document.getElementById("studentName").value.trim(),
+      studentClass:  document.getElementById("studentClass").value,
+      board:         document.getElementById("board").value,
+      dob:           document.getElementById("dob").value,
+      gender:        document.getElementById("gender").value,
+      email:         document.getElementById("email").value.trim(),
+      phone:         document.getElementById("phone").value.trim(),
+      parentName:    document.getElementById("parentName").value.trim(),
+      parentPhone:   document.getElementById("parentPhone").value.trim(),
+      address:       document.getElementById("address").value.trim(),
+      subjects:      subjects,
+      subjectCount:  subjects.length,
+      monthlyFee:    subjects.length * 500,
+      annualFee:     subjects.length * 500 * 10,
+      paymentStatus: "Pending",
+      batch:         "2026"
+    };
+
+    // UI — loading state
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    showStatus("loading", "⏳ Submitting your enrollment…");
+
+    try {
+      let docId;
+      if (DATABASE_TYPE === "realtime") {
+        docId = await saveToRealtime(formData);
+      } else {
+        docId = await saveToFirestore(formData);
+      }
+
+      // ── SUCCESS ──
+      showStatus("success",
+        `✅ Enrollment submitted successfully!<br>
+         <span style="font-size:12px;opacity:0.8;">Record ID: <strong>${docId}</strong></span>`
+      );
+
+      // Populate summary section
+      renderSummary(formData);
+      document.getElementById("summarySection").style.display = "block";
+      document.getElementById("summarySection").scrollIntoView({ behavior: "smooth", block: "start" });
+
+      btn.textContent = "✓ Submitted";
+      btn.style.background = "linear-gradient(135deg,#06d6a0,#04a87d)";
+
+    } catch (err) {
+      console.error("Firebase error:", err);
+      showStatus("error",
+        `❌ Submission failed: <strong>${err.message}</strong><br>
+         <span style="font-size:11px;">Check your Firebase config and database rules.</span>`
+      );
+      btn.disabled = false;
+      btn.textContent = "SUBMIT ENROLLMENT";
+    }
+  };
+
+  // ── Status helper ─────────────────────────────────────────
+  function showStatus(type, html) {
+    const el = document.getElementById("formStatus");
+    el.innerHTML = html;
+    el.className = "form-status " + type;
+    el.style.display = "block";
+  }
+
+  // ── Render summary card ───────────────────────────────────
+  function renderSummary(data) {
+    const icons = {
+      Physics: "⚛️", Chemistry: "🧪", Biology: "🧬",
+      Mathematics: "📐", Computer: "💻", Geography: "🌍",
+      "History & Civics": "🏛️", Economics: "📊"
+    };
+    const tags = {
+      Physics: "Science", Chemistry: "Science", Biology: "Science",
+      Mathematics: "Core", Computer: "Skill / CS", Geography: "Humanities",
+      "History & Civics": "Humanities", Economics: "Commerce"
+    };
+
+    document.getElementById("sName").textContent  = data.studentName;
+    document.getElementById("sClass").textContent = data.studentClass;
+    document.getElementById("sBoard").textContent = data.board;
+    document.getElementById("sPhone").textContent = data.phone;
+    document.getElementById("sPName").textContent = data.parentName;
+
+    document.getElementById("subjRows").innerHTML = data.subjects.map((s, i) => `
+      <div class="summ-row">
+        <div class="summ-row-left">
+          <div class="summ-num">${String(i+1).padStart(2,"0")}</div>
+          <span style="font-size:17px;">${icons[s]||"📚"}</span>
+          <div>
+            <div class="summ-name">${s}</div>
+            <div class="summ-tag">${tags[s]||"Subject"}</div>
+          </div>
+        </div>
+        <div class="summ-price">₹500 / mo</div>
+      </div>`).join("");
+
+    document.getElementById("sCount").textContent   = data.subjectCount;
+    document.getElementById("sCalc").textContent    = `${data.subjectCount} × ₹500 = ₹${data.monthlyFee.toLocaleString("en-IN")}`;
+    document.getElementById("sMonthly").textContent = `₹${data.monthlyFee.toLocaleString("en-IN")}`;
+    document.getElementById("sAnnual").textContent  = `₹${data.annualFee.toLocaleString("en-IN")}`;
+  }
+
+  // ── Live fee calculator ───────────────────────────────────
+  // ES modules are deferred so DOM is ready by the time this runs
+  document.querySelectorAll('input[name="subject"]').forEach(cb => {
+    cb.addEventListener("change", updateLiveFee);
+  });
+  updateLiveFee();
+
+  function updateLiveFee() {
+    const count  = document.querySelectorAll('input[name="subject"]:checked').length;
+    const total  = count * 500;
+    const annual = total * 10;
+
+    document.getElementById("priceBreakdown").textContent =
+      count === 0 ? "Select subjects to see your fee"
+                  : count + " subject" + (count > 1 ? "s" : "") + " × ₹500";
+
+    const amtEl = document.getElementById("priceAmount");
+    amtEl.innerHTML = '<span class="pcurrency">₹</span>' + total.toLocaleString("en-IN") + '<span class="pper">/month</span>';
+    amtEl.classList.remove("pulse");
+    void amtEl.offsetWidth;
+    amtEl.classList.add("pulse");
+
+    const annBox = document.getElementById("annualPreview");
+    if (count > 0) {
+      document.getElementById("annualPreviewVal").textContent = "₹" + annual.toLocaleString("en-IN");
+      annBox.style.display = "block";
+    } else {
+      annBox.style.display = "none";
+    }
+
+    const checked = [...document.querySelectorAll('input[name="subject"]:checked')];
+    document.getElementById("subjectTags").innerHTML = count === 0
+      ? '<span class="no-tags">No subjects selected</span>'
+      : checked.map(function(cb){ return '<span class="stag">' + cb.value + '</span>'; }).join("");
+  }
+
+</script>
+
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #13131c;
+    --surface: #1a1a28;
+    --border: #2a2a3e;
+    --accent: #f5a623;
+    --accent2: #e63946;
+    --accent3: #4cc9f0;
+    --green: #06d6a0;
+    --text: #f0f0f5;
+    --muted: #7a7a9a;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(ellipse 70% 50% at 0% 0%, rgba(245,166,35,.06) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 100%, rgba(76,201,240,.05) 0%, transparent 60%);
+  }
+
+  .wrapper {
+    position:relative; z-index:1;
+    max-width:820px; margin:0 auto; padding:40px 20px 80px;
+  }
+
+  /* ── HEADER ── */
+  .header { text-align:center; margin-bottom:40px; }
+  .badge {
+    display:inline-block;
+    background:linear-gradient(90deg,var(--accent2),#ff6b6b);
+    color:#fff; font-family:'Space Mono',monospace; font-size:11px;
+    font-weight:700; letter-spacing:2px; padding:6px 16px;
+    border-radius:2px; margin-bottom:16px; text-transform:uppercase;
+  }
+  h1 {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(40px,8vw,72px); line-height:.95;
+    letter-spacing:2px; margin-bottom:8px;
+  }
+  h1 .y { color:var(--accent); }
+  h1 .b { color:var(--accent3); }
+  .tagline { font-size:14px; color:var(--muted); }
+  .divider { width:60px; height:3px; background:linear-gradient(90deg,var(--accent),var(--accent2)); margin:16px auto 0; border-radius:2px; }
+
+
+
+  /* ── FORM CARD ── */
+  .form-card {
+    background:var(--card); border:1px solid var(--border);
+    border-radius:16px; overflow:hidden; margin-bottom:24px;
+    position:relative;
+  }
+  .form-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3));
+  }
+
+  .form-section {
+    padding:28px 32px;
+    border-bottom:1px solid var(--border);
+  }
+  .form-section:last-child { border-bottom:none; }
+
+  .section-label {
+    font-family:'Space Mono',monospace; font-size:10px; letter-spacing:3px;
+    color:var(--accent); text-transform:uppercase; margin-bottom:20px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after { content:''; flex:1; height:1px; background:rgba(245,166,35,.15); }
+
+  /* ── FORM FIELDS ── */
+  .field-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:16px;
+  }
+  .field-full { grid-column:1/-1; }
+
+  .field { display:flex; flex-direction:column; gap:6px; }
+
+  label {
+    font-size:12px; font-weight:600; color:var(--muted);
+    font-family:'Space Mono',monospace; letter-spacing:.5px; text-transform:uppercase;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="date"],
+  select, textarea {
+    background:var(--surface); border:1.5px solid var(--border);
+    color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px;
+    padding:12px 14px; border-radius:9px; outline:none; width:100%;
+    transition:border-color .2s, box-shadow .2s;
+    -webkit-appearance:none;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(245,166,35,.12);
+  }
+
+  select option { background:#1a1a28; }
+  textarea { resize:vertical; min-height:80px; }
+
+  input::placeholder, textarea::placeholder { color:var(--muted); opacity:.6; }
+
+  /* required asterisk */
+  .req { color:var(--accent2); margin-left:2px; }
+
+  /* ── SUBJECT CHECKBOXES ── */
+  .subject-grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px;
+  }
+
+  .subj-item { position:relative; cursor:pointer; }
+  .subj-item input { position:absolute; opacity:0; width:0; height:0; }
+
+  .subj-label {
+    display:flex; align-items:center; gap:10px;
+    padding:12px 14px; border:1.5px solid var(--border);
+    border-radius:9px; cursor:pointer; background:var(--surface);
+    transition:all .18s; user-select:none;
+  }
+
+  .subj-label:hover { border-color:var(--accent); background:rgba(245,166,35,.05); }
+
+  .subj-item input:checked + .subj-label {
+    border-color:var(--accent);
+    background:rgba(245,166,35,.1);
+    box-shadow:0 0 0 1px rgba(245,166,35,.2);
+  }
+
+  .subj-icon { font-size:20px; flex-shrink:0; }
+  .subj-info { flex:1; }
+  .subj-name { font-size:12px; font-weight:600; color:var(--text); }
+  .subj-cat  { font-size:10px; color:var(--muted); font-family:'Space Mono',monospace; }
+
+  .chk {
+    width:18px; height:18px; border:2px solid var(--border);
+    border-radius:4px; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; transition:all .18s;
+  }
+  .subj-item input:checked + .subj-label .chk {
+    background:var(--accent); border-color:var(--accent);
+  }
+  .chk::after { content:'✓'; font-size:10px; font-weight:700; color:#000; opacity:0; transition:opacity .18s; }
+  .subj-item input:checked + .subj-label .chk::after { opacity:1; }
+
+  /* ── PRICING PANEL ── */
+  .pricing-panel {
+    background: linear-gradient(135deg,#1a1a2e,#16213e);
+    border-top: 1px solid rgba(76,201,240,0.15);
+    padding: 28px 32px;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; flex-wrap: wrap; gap: 20px;
+  }
+  .price-left {}
+  .price-label { font-size:11px; color:var(--muted); font-family:'Space Mono',monospace; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:4px; }
+  .price-breakdown { font-size:13px; color:var(--accent3); margin-bottom:6px; min-height:18px; transition:all .3s; font-family:'Space Mono',monospace; }
+  .price-amount { font-family:'Bebas Neue',sans-serif; font-size:58px; line-height:1; color:var(--accent); letter-spacing:1px; transition:all .3s; }
+  .pcurrency { font-size:28px; vertical-align:top; margin-top:10px; display:inline-block; }
+  .pper { font-size:14px; color:var(--muted); font-family:'DM Sans',sans-serif; font-weight:400; letter-spacing:0; }
+  .price-note { font-size:11px; color:var(--muted); margin-top:4px; }
+  .price-right { display:flex; flex-direction:column; gap:12px; align-items:flex-end; }
+  .annual-preview { background:rgba(6,214,160,.08); border:1px solid rgba(6,214,160,.2); border-radius:10px; padding:10px 16px; text-align:right; }
+  .annual-preview-label { font-size:10px; color:rgba(6,214,160,.6); font-family:'Space Mono',monospace; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
+  .annual-preview-val { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--green); letter-spacing:1px; }
+  .subject-tags { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; max-width:280px; }
+  .no-tags { font-size:12px; color:var(--muted); font-style:italic; }
+  .stag { background:rgba(245,166,35,.12); border:1px solid rgba(245,166,35,.3); color:var(--accent); font-size:10px; font-weight:600; padding:3px 10px; border-radius:20px; font-family:'Space Mono',monospace; letter-spacing:.5px; animation:tagPop .18s ease; }
+  @keyframes tagPop { from{transform:scale(.8);opacity:0} to{transform:scale(1);opacity:1} }
+  @keyframes pulsePr { 0%{transform:scale(1)} 50%{transform:scale(1.03)} 100%{transform:scale(1)} }
+  .pulse { animation:pulsePr .3s ease; }
+
+  /* ── SUBMIT BUTTON ── */
+  .submit-row { padding:28px 32px; background:rgba(0,0,0,.2); }
+
+  #submitBtn {
+    width:100%;
+    background:linear-gradient(135deg,var(--accent),#e08a00);
+    color:#000; font-family:'DM Sans',sans-serif; font-size:16px; font-weight:700;
+    padding:16px 24px; border:none; border-radius:11px; cursor:pointer;
+    letter-spacing:.5px; transition:all .2s;
+    box-shadow:0 4px 24px rgba(245,166,35,.3);
+  }
+  #submitBtn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 32px rgba(245,166,35,.4); }
+  #submitBtn:disabled { opacity:.7; cursor:not-allowed; transform:none; }
+
+  /* ── STATUS MESSAGE ── */
+  .form-status {
+    display:none; margin-top:16px; padding:14px 18px;
+    border-radius:10px; font-size:13px; line-height:1.7;
+  }
+  .form-status.loading  { background:rgba(76,201,240,.08); border:1px solid rgba(76,201,240,.3); color:var(--accent3); }
+  .form-status.success  { background:rgba(6,214,160,.08); border:1px solid rgba(6,214,160,.3);  color:var(--green); }
+  .form-status.error    { background:rgba(230,57,70,.08); border:1px solid rgba(230,57,70,.3);   color:#ff8a92; }
+
+  /* ── SUMMARY SECTION ── */
+  #summarySection {
+    display:none; margin-top:40px;
+    background:#0a1a12; border:2px solid var(--green);
+    border-radius:18px; overflow:hidden;
+    animation:fadeUp .5s ease;
+  }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+  .summ-header {
+    background:linear-gradient(135deg,#051210,#0a1f15);
+    padding:20px 28px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:12px;
+    border-bottom:1px solid rgba(6,214,160,.2);
+  }
+  .summ-header-left { display:flex; align-items:center; gap:12px; }
+  .summ-check { width:44px;height:44px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 20px rgba(6,214,160,.35); }
+  .summ-title { font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--green);line-height:1; }
+  .summ-sub   { font-family:'Space Mono',monospace;font-size:10px;color:rgba(6,214,160,.5);letter-spacing:1px;margin-top:3px; }
+  .summ-badge { background:rgba(6,214,160,.1);border:1px solid rgba(6,214,160,.3);color:var(--green);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:5px 14px;border-radius:20px;letter-spacing:1px; }
+
+  .summ-body { padding:24px 28px; }
+
+  .summ-info-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px;
+  }
+  .summ-info-cell { background:rgba(6,214,160,.04);border:1px solid rgba(6,214,160,.1);border-radius:9px;padding:12px 14px; }
+  .summ-info-cell .lbl { font-size:10px;color:rgba(6,214,160,.5);font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px; }
+  .summ-info-cell .val { font-size:14px;font-weight:700;color:var(--text); }
+
+  .slab { font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:rgba(6,214,160,.6);text-transform:uppercase;margin-bottom:12px; }
+
+  .summ-row { display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:9px;margin-bottom:8px;background:rgba(6,214,160,.05);border:1px solid rgba(6,214,160,.13); }
+  .summ-row-left { display:flex;align-items:center;gap:10px; }
+  .summ-num  { width:22px;height:22px;background:rgba(6,214,160,.12);border:1px solid rgba(6,214,160,.3);border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:var(--green); }
+  .summ-name { font-size:13px;font-weight:600;color:var(--text); }
+  .summ-tag  { font-size:10px;color:var(--muted);font-family:'Space Mono',monospace; }
+  .summ-price{ font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--accent); }
+
+  .summ-calc-table {
+    border-top:1px dashed rgba(6,214,160,.2); padding-top:14px; margin:14px 0;
+  }
+  .calc-row { display:flex;justify-content:space-between;padding:7px 0;font-size:13px;color:var(--muted);border-bottom:1px dashed rgba(255,255,255,.05); }
+  .calc-row:last-child { border-bottom:none; }
+  .calc-row .cv { font-weight:700;color:var(--accent3); }
+
+  .total-bar {
+    background:linear-gradient(135deg,#0d2518,#091a10);
+    border:2px solid var(--green); border-radius:14px;
+    padding:22px 24px; display:flex; align-items:center;
+    justify-content:space-between; flex-wrap:wrap; gap:16px;
+    margin-bottom:16px;
+  }
+  .total-label { font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:rgba(6,214,160,.55);text-transform:uppercase;margin-bottom:5px; }
+  #sMonthly { font-family:'Bebas Neue',sans-serif;font-size:58px;line-height:1;color:var(--green);letter-spacing:1px; }
+  .monthly-per { font-size:16px;color:rgba(6,214,160,.45);font-family:'DM Sans',sans-serif;font-weight:400; }
+  .annual-box { background:rgba(6,214,160,.1);border:1px solid rgba(6,214,160,.25);border-radius:9px;padding:11px 18px; }
+  .annual-lbl { font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:rgba(6,214,160,.5);text-transform:uppercase;margin-bottom:2px; }
+  #sAnnual { font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--green);letter-spacing:1px; }
+
+  .pay-strip {
+    background:#0d0508; border:1px solid rgba(230,57,70,.35);
+    border-radius:10px; padding:14px 18px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .pay-strip span { font-size:13px;color:#ffaaaa;line-height:1.6; }
+  .pay-strip strong { color:#fff; }
+
+  @media(max-width:600px){
+    .field-grid { grid-template-columns:1fr; }
+    .subject-grid { grid-template-columns:1fr 1fr; }
+    .summ-info-grid { grid-template-columns:1fr; }
+    .form-section { padding:20px; }
+    .summ-body { padding:16px; }
+    .total-bar { flex-direction:column; align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="badge">🔥 2026 Batch · ICSE / ISC</div>
+    <h1>STUDENT<br><span class="y">ENROLLMENT</span><br><span class="b">FORM</span></h1>
+    <p class="tagline">Fill in your details below to enroll in the All-Rounder Dominator Package</p>
+    <div class="divider"></div>
+  </div>
+
+  <!-- FORM -->
+  <form class="form-card" onsubmit="handleFormSubmit(event)" novalidate>
+
+    <!-- STUDENT DETAILS -->
+    <div class="form-section">
+      <div class="section-label">01 — Student Details</div>
+      <div class="field-grid">
+
+        <div class="field field-full">
+          <label>Full Name <span class="req">*</span></label>
+          <input id="studentName" type="text" placeholder="e.g. Aryan Mehta" required />
+        </div>
+
+        <div class="field">
+          <label>Class <span class="req">*</span></label>
+          <select id="studentClass" required>
+            <option value="">Select Class</option>
+            <option>Class 9 (ICSE)</option>
+            <option>Class 10 (ICSE)</option>
+            <option>Class 11 (ISC)</option>
+            <option>Class 12 (ISC)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Board <span class="req">*</span></label>
+          <select id="board" required>
+            <option value="">Select Board</option>
+            <option>ICSE</option>
+            <option>ISC</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Date of Birth</label>
+          <input id="dob" type="date" />
+        </div>
+
+        <div class="field">
+          <label>Gender</label>
+          <select id="gender">
+            <option value="">Select</option>
+            <option>Male</option>
+            <option>Female</option>
+            <option>Other</option>
+            <option>Prefer not to say</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Student Email</label>
+          <input id="email" type="email" placeholder="student@email.com" />
+        </div>
+
+        <div class="field">
+          <label>Student Phone <span class="req">*</span></label>
+          <input id="phone" type="tel" placeholder="+91 XXXXX XXXXX" required />
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PARENT DETAILS -->
+    <div class="form-section">
+      <div class="section-label">02 — Parent / Guardian Details</div>
+      <div class="field-grid">
+
+        <div class="field">
+          <label>Parent / Guardian Name <span class="req">*</span></label>
+          <input id="parentName" type="text" placeholder="Full name" required />
+        </div>
+
+        <div class="field">
+          <label>Parent Phone <span class="req">*</span></label>
+          <input id="parentPhone" type="tel" placeholder="+91 XXXXX XXXXX" required />
+        </div>
+
+        <div class="field field-full">
+          <label>Home Address</label>
+          <textarea id="address" placeholder="House No., Street, Area, City, Pincode"></textarea>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SUBJECT SELECTION -->
+    <div class="form-section">
+      <div class="section-label">03 — Select Subjects (₹500 each / month)</div>
+
+      <div class="subject-grid">
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Physics"/>
+          <div class="subj-label">
+            <div class="subj-icon">⚛️</div>
+            <div class="subj-info"><div class="subj-name">Physics</div><div class="subj-cat">Science</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Chemistry"/>
+          <div class="subj-label">
+            <div class="subj-icon">🧪</div>
+            <div class="subj-info"><div class="subj-name">Chemistry</div><div class="subj-cat">Science</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Biology"/>
+          <div class="subj-label">
+            <div class="subj-icon">🧬</div>
+            <div class="subj-info"><div class="subj-name">Biology</div><div class="subj-cat">Science</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Mathematics"/>
+          <div class="subj-label">
+            <div class="subj-icon">📐</div>
+            <div class="subj-info"><div class="subj-name">Mathematics</div><div class="subj-cat">Core</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Computer"/>
+          <div class="subj-label">
+            <div class="subj-icon">💻</div>
+            <div class="subj-info"><div class="subj-name">Computer</div><div class="subj-cat">Skill / CS</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Geography"/>
+          <div class="subj-label">
+            <div class="subj-icon">🌍</div>
+            <div class="subj-info"><div class="subj-name">Geography</div><div class="subj-cat">Humanities</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="History & Civics"/>
+          <div class="subj-label">
+            <div class="subj-icon">🏛️</div>
+            <div class="subj-info"><div class="subj-name">History & Civics</div><div class="subj-cat">Humanities</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+        <label class="subj-item">
+          <input type="checkbox" name="subject" value="Economics"/>
+          <div class="subj-label">
+            <div class="subj-icon">📊</div>
+            <div class="subj-info"><div class="subj-name">Economics</div><div class="subj-cat">Commerce</div></div>
+            <div class="chk"></div>
+          </div>
+        </label>
+
+      </div>
+
+    </div>
+
+    <!-- PRICING PANEL -->
+    <div class="form-section" style="padding:0;">
+      <div class="pricing-panel">
+        <div class="price-left">
+          <div class="price-label">Monthly Fee (Per Student)</div>
+          <div class="price-breakdown" id="priceBreakdown">Select subjects to see your fee</div>
+          <div class="price-amount" id="priceAmount">
+            <span class="pcurrency">₹</span>0<span class="pper">/month</span>
+          </div>
+          <div class="price-note">₹500 × number of subjects selected</div>
+        </div>
+        <div class="price-right">
+          <div class="annual-preview" id="annualPreview" style="display:none;">
+            <div class="annual-preview-label">Annual Total (10 months)</div>
+            <div class="annual-preview-val" id="annualPreviewVal">₹0</div>
+          </div>
+          <div class="subject-tags" id="subjectTags">
+            <span class="no-tags">No subjects selected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBMIT -->
+    <div class="submit-row">
+      <button type="submit" id="submitBtn">SUBMIT ENROLLMENT →</button>
+      <div id="formStatus" class="form-status"></div>
+    </div>
+
+  </form>
+
+  <!-- ══════════════════════════════════════
+       FINALIZED ENROLLMENT SUMMARY
+       (appears automatically after submit)
+  ═══════════════════════════════════════ -->
+  <div id="summarySection">
+
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(6,214,160,0.4));"></div>
+      <span style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--green);white-space:nowrap;text-transform:uppercase;">✅ Finalized Enrollment Summary</span>
+      <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(6,214,160,0.4),transparent);"></div>
+    </div>
+
+    <div style="background:#0a1a12;border:2px solid var(--green);border-radius:18px;overflow:hidden;">
+
+      <!-- Header -->
+      <div class="summ-header">
+        <div class="summ-header-left">
+          <div class="summ-check">✓</div>
+          <div>
+            <div class="summ-title">ENROLLMENT CONFIRMED</div>
+            <div class="summ-sub">ICSE / ISC · 2026 BATCH · ALL-ROUNDER DOMINATOR PACKAGE</div>
+          </div>
+        </div>
+        <div class="summ-badge">✅ SAVED TO DATABASE</div>
+      </div>
+
+      <div class="summ-body">
+
+        <!-- Student info grid -->
+        <div class="slab" style="margin-bottom:12px;">Student Information</div>
+        <div class="summ-info-grid" style="margin-bottom:24px;">
+          <div class="summ-info-cell"><div class="lbl">Student Name</div><div class="val" id="sName">—</div></div>
+          <div class="summ-info-cell"><div class="lbl">Class</div><div class="val" id="sClass">—</div></div>
+          <div class="summ-info-cell"><div class="lbl">Board</div><div class="val" id="sBoard">—</div></div>
+          <div class="summ-info-cell"><div class="lbl">Contact</div><div class="val" id="sPhone">—</div></div>
+          <div class="summ-info-cell" style="grid-column:1/-1"><div class="lbl">Parent / Guardian</div><div class="val" id="sPName">—</div></div>
+        </div>
+
+        <!-- Opted subjects -->
+        <div class="slab">Opted Subjects &amp; Courses</div>
+        <div id="subjRows" style="margin-bottom:8px;"></div>
+
+        <!-- Calc breakdown -->
+        <div class="summ-calc-table">
+          <div class="calc-row"><span>No. of Subjects</span><span class="cv" id="sCount">—</span></div>
+          <div class="calc-row"><span>Rate per Subject</span><span class="cv">₹500 / month</span></div>
+          <div class="calc-row"><span>Calculation</span><span class="cv" id="sCalc">—</span></div>
+        </div>
+
+        <!-- BIG TOTAL -->
+        <div class="total-bar">
+          <div>
+            <div class="total-label">Total Monthly Payment</div>
+            <div>
+              <span id="sMonthly" style="font-family:'Bebas Neue',sans-serif;font-size:58px;line-height:1;color:var(--green);letter-spacing:1px;">—</span>
+              <span class="monthly-per"> /month</span>
+            </div>
+          </div>
+          <div>
+            <div class="annual-box">
+              <div class="annual-lbl">Annual Total (10 months)</div>
+              <div id="sAnnual" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--green);letter-spacing:1px;">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment reminder -->
+        <div class="pay-strip">
+          <span style="font-size:20px;flex-shrink:0;">⛔</span>
+          <span>Pay <strong>only to the Coaching Head.</strong> Always collect your signed receipt after payment. Do not pay to anyone else.</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- /summarySection -->
+
+</div><!-- /wrapper -->
+
+<!-- ─────────────────────────────────────────────────────
+     FEE CALCULATOR  (plain script — runs after full DOM)
+     No module scope, no timing issues.
+     Select subjects → count × ₹500 → display instantly.
+───────────────────────────────────────────────────────── -->
+<script>
+  (function () {
+    var PRICE = 500;
+
+    function calcFee() {
+      var boxes   = document.querySelectorAll('input[name="subject"]:checked');
+      var count   = boxes.length;
+      var total   = count * PRICE;
+      var annual  = total * 10;
+
+      /* ── breakdown line ── */
+      document.getElementById("priceBreakdown").textContent =
+        count === 0
+          ? "Select subjects to see your fee"
+          : count + " subject" + (count > 1 ? "s" : "") + "  \u00d7  \u20b9500";
+
+      /* ── big amount ── */
+      var amtEl = document.getElementById("priceAmount");
+      amtEl.innerHTML =
+        "<span class='pcurrency'>\u20b9</span>" +
+        total.toLocaleString("en-IN") +
+        "<span class='pper'> /month</span>";
+
+      /* ── annual box ── */
+      var annBox = document.getElementById("annualPreview");
+      var annVal = document.getElementById("annualPreviewVal");
+      if (count > 0) {
+        annVal.textContent = "\u20b9" + annual.toLocaleString("en-IN");
+        annBox.style.display = "block";
+      } else {
+        annBox.style.display = "none";
+      }
+
+      /* ── subject tags ── */
+      var tagsEl = document.getElementById("subjectTags");
+      if (count === 0) {
+        tagsEl.innerHTML = "<span class='no-tags'>No subjects selected</span>";
+      } else {
+        var html = "";
+        boxes.forEach(function (cb) {
+          html += "<span class='stag'>" + cb.value + "</span>";
+        });
+        tagsEl.innerHTML = html;
+      }
+    }
+
+    /* attach to every subject checkbox */
+    document.querySelectorAll('input[name="subject"]').forEach(function (cb) {
+      cb.addEventListener("change", calcFee);
+    });
+
+    /* run once on load to set initial state */
+    calcFee();
+  })();
+</script>
+
+</body>
+</html>
